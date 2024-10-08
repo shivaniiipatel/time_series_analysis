@@ -1,0 +1,507 @@
+---
+title: "SEASONAL & NON-SEASONAL TIME SERIES ANALYSIS"
+subtitle: "MA 641"
+name: "SHIVANI PATEL- CWID:20018910"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# SEASONAL & NON-SEASONAL TIME SERIES ANALYSIS
+
+## CO2 LEVEL IN ATMOSPHERE & APPLE STOCK PRICE PREDICTION
+
+## OBJECTIVE
+
+The primary objective of this report is to conduct a detailed time series analysis and forecasting for two distinct datasets: atmospheric CO2 levels and Apple Inc. stock prices. This analysis will help in understanding the different behaviors exhibited by seasonal and non-seasonal data and in applying appropriate forecasting models to predict future trends.
+
+## DATA OVERVIEW
+
+### CO2 Levels in Atmosphere (Seasonal)
+
+**Description:** Monthly average atmospheric carbon dioxide levels measured at the Mauna Loa Observatory. **Purpose:** To examine the seasonal variations and long-term trends in atmospheric CO2 levels, which are crucial for environmental policy planning and climate change mitigation strategies.
+
+### Apple Inc. Stock Price (Non-Seasonal)
+
+**Description:** Daily closing stock prices of Apple Inc., reflecting market behaviors and investor sentiment. **Purpose:** To analyze market trends and volatility in Apple's stock price, providing insights for financial investment and stock market behavior.
+
+## DATA PREPARATION
+
+### Loading Data
+
+The dataset is loaded from a CSV file into R using the read_csv function from the readr package. The initial exploration involves understanding the number of variables, data points, and the basic structure of the dataset.
+
+### Data Cleaning
+
+This section describes the process of handling missing values and removing any unneeded variables. It also covers the transformation of the year and month fields into a proper date format, which is essential for time series analysis.
+
+```{r}
+# Load necessary libraries
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(forecast)
+library(tseries)
+library(zoo)
+library(lubridate)
+library(tidyverse)
+library(TSA)
+```
+
+```{r}
+# Load the power usage dataset
+data <- read_csv("/Users/shivanipatel/Downloads/co2.csv")
+```
+
+```{r}
+# Convert Year and Month to Date object
+data$date <- as.Date(with(data, paste(Year, Month, "01", sep="-")), "%Y-%m-%d")
+
+# Select the relevant columns and remove rows with NAs in 'Carbon Dioxide (ppm)'
+data <- data %>%
+  select(date, Carbon_Dioxide_ppm = `Carbon Dioxide (ppm)`) %>%
+  na.omit()
+
+head(data)
+```
+
+```{r}
+# Convert to a time series object
+co2_ts <- ts(data$Carbon_Dioxide_ppm, start=c(year(min(data$date)), month(min(data$date))), frequency=12)
+```
+
+## EXPLORATORY DATA ANALYSIS
+
+### Time Series Plot
+
+A plot of CO2 concentrations over time is created using ggplot2. This visualization helps in identifying any obvious trends, seasonality, or irregular patterns in the data.
+
+### Statistical Summary
+
+Provide summary statistics such as mean, median, quartiles, and standard deviation to give a numerical description of the data. This step is crucial for identifying outliers and understanding the distribution of CO2 levels.
+
+```{r}
+# Plot the data
+plot(co2_ts, main="Atmospheric CO2 Levels", xlab="Year", ylab="CO2 concentration (ppm)")
+```
+
+## STATIONARY TESTING
+
+### Augmented Dickey-Fuller Test
+
+The Augmented Dickey-Fuller (ADF) test is used to test whether the CO2 time series is stationary. This involves explaining the null hypothesis of the ADF test, which assumes the presence of a unit root (non-stationarity).
+
+```{r}
+# Perform Augmented Dickey-Fuller Test for Stationarity
+adf_test <- adf.test(co2_ts, alternative = "stationary")
+print(adf_test)
+```
+
+The Augmented Dickey-Fuller (ADF) test results indicate that the p-value is 0.9818, which is significantly higher than the typical significance level (e.g., 0.05). This suggests that we fail to reject the null hypothesis, implying that the CO2 time series is not stationary.
+
+```{r}
+# Differencing the series
+co2_diff <- diff(co2_ts, differences = 1)
+
+# Plot the differenced series
+plot(co2_diff, main="First Differenced CO2 Levels", xlab="Year", ylab="Differenced CO2 concentration")
+
+```
+
+```{r}
+# Perform ADF test on the differenced series
+adf_test_diff <- adf.test(co2_diff, alternative = "stationary")
+print(adf_test_diff)
+
+```
+
+```{r}
+# If the series is not stationary, difference the series
+if(adf_test$p.value > 0.05) {
+  co2_ts_diff <- diff(co2_ts)
+  adf_test_diff <- adf.test(co2_ts_diff, alternative = "stationary")
+  plot(co2_ts_diff, main="Differenced CO2 Series")
+}
+
+```
+
+After performing first differencing on the CO2 time series, the Augmented Dickey-Fuller (ADF) test results show a significant improvement towards stationarity. The Dickey-Fuller statistic is -31.713, and despite the warning that the p-value is smaller than the printed value, the reported p-value is 0.01. This indicates that after differencing, the time series has become stationary, as we can reject the null hypothesis of a unit root at the 1% significance level.
+
+This result means that the first differencing was effective in removing non-stationarity from the time series, likely caused by trends or seasonal components, and it is now suitable for ARIMA or other statistical modeling techniques that assume stationarity.
+
+## ACF & PACF PLOTS
+
+```{r}
+# Autocorrelation plots-Original Data
+Acf(co2_ts, main="ACF for CO2 Data")
+```
+
+```{r}
+# Partial Autocorrelation plots-Original Data
+Pacf(co2_ts, main="PACF for CO2 Data")
+```
+
+```{r}
+# Autocorrelation plots-Differentiated Data
+Acf(co2_ts_diff, main="ACF for CO2 Differentiated Data")
+```
+
+```{r}
+# Partial Autocorrelation plots-Differentiated Data
+Pacf(co2_ts_diff, main="PACF for CO2 Differentiated Data")
+```
+
+```{r}
+eacf_results <- eacf(co2_ts_diff)
+
+# Print the EACF results
+print(eacf_results)
+```
+
+## MODELING
+
+## ARIMA MODEL
+
+```{r}
+arima_model <- Arima(co2_ts_diff, order=c(3, 1, 3))  
+summary(arima_model)
+```
+
+## RESIDUAL ANALYSIS
+
+```{r}
+# Check the residuals of the ARIMA model
+checkresiduals(arima_model)
+```
+
+```{r}
+# Assuming you have an ARIMA model stored in a variable called arima_model
+residuals <- residuals(arima_model)
+
+qqnorm(residuals)
+qqline(residuals, col = "red")
+
+```
+
+### Ljung-Box Test
+
+```{r}
+tsdiag(arima_model)
+```
+
+## FORECASTING
+
+```{r}
+forecasted_values <- forecast(arima_model, h=48)  # forecast the next 48 periods
+plot(forecasted_values)
+```
+
+```{r}
+# Forecast 12 months into the future
+future_forecast <- forecast(arima_model, h=12, level=c(95))  # Default is usually 80 and 95%
+
+# Plot the forecast with the 95% confidence interval
+plot(future_forecast, main="Future Forecast", xlab="Time", ylab="Values")
+
+```
+
+## SARIMA MODEL
+
+```{r}
+sarima_model <- Arima(co2_ts_diff, order=c(2,1,1), seasonal=list(order=c(1,1,1), period=12))
+
+summary(sarima_model)
+```
+
+## FORECASTING
+
+```{r}
+future_forecast_sarima <- forecast(sarima_model, h=12)  # Forecast 12 periods ahead
+
+# Plot the forecast
+plot(future_forecast_sarima, main="SARIMA Model Forecast", xlab="Time", ylab="Values")
+```
+
+## RESIDUAL ANALYSIS
+
+```{r}
+checkresiduals(sarima_model)
+```
+
+```{r}
+residuals <- residuals(sarima_model)
+
+qqnorm(residuals)
+qqline(residuals, col = "red")
+```
+
+### Ljung-Box Test
+
+```{r}
+tsdiag(sarima_model)
+```
+
+## FORECASTING
+
+```{r}
+sarima_forecasted_values <- forecast(sarima_model, h=48)
+plot(sarima_forecasted_values, main="Seasonal CO2 Forecast")
+```
+
+```{r}
+sarima_forecasted_values
+```
+
+## CONCLUSION
+
+The comparison of SARIMA and ARIMA models for forecasting CO2 emissions reveals their respective capacities to handle seasonal and non-seasonal data. The SARIMA model, specifically tailored for seasonal data, effectively captures the periodic fluctuations in CO2 levels, as demonstrated by the consistent patterns over the decades and the highlighted forecast extending these trends. Conversely, the ARIMA model, though applied to the same dataset, does not inherently account for seasonal variations, which may result in less accuracy for long-term predictions where seasonal effects are pronounced. The choice between these models should consider the data's seasonal characteristics and the forecasting goals, with SARIMA being preferable for capturing and projecting cyclical behaviors inherent in atmospheric CO2 measurements.
+
+# NON-SEASONAL DATA
+
+```{r}
+library(stats)
+library(tseries)
+library(tidyverse)
+library(TSA)
+library(ggplot2)
+library(rugarch)
+library(forecast)
+library(dplyr)
+```
+
+```{r}
+data1 <- read.csv("/Users/shivanipatel/Downloads/AAPL.csv")
+head(data1)
+```
+
+```{r}
+
+data<- data1 %>%
+    filter(year(Date) >= 2010 & year(Date) <= 2020)
+
+data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+```
+
+```{r}
+summary(data)
+```
+
+```{r}
+# Plotting the closing prices over time
+ggplot(data, aes(x = Date, y = Close)) +
+  geom_line() +
+  labs(title = "Apple Stock Closing Prices (2010-2020)", x = "Date", y = "Close Price")
+```
+
+The chart of Apple's stock prices from 2010 to 2020 suggests the data is non-stationary. This is indicated by the overall upward trend in the stock prices and the significant fluctuations, including sharp increases and sudden declines.
+
+```{r}
+sum(is.na(data$Close))
+```
+
+```{r}
+data <- select(data, Date, Close)
+```
+
+```{r}
+apple_ts <- ts(data=data$Close, start = c(2010, 1), frequency = 365.25)
+
+summary(apple_ts)
+```
+
+```{r}
+plot(apple_ts, type='l', col='red', ylab="Closing Prices", main="Closing Prices from 2010-2020")
+```
+
+The plot of Apple's closing prices from 2010 to 2020 shows a clear upward trend with significant fluctuations, indicating non-stationarity in the time series data.
+
+## ACF & PACF PLOTS
+
+```{r}
+acf(apple_ts, main="ACF Plot for Closing Prices (2015-2020)") 
+```
+
+```{r}
+pacf(apple_ts, main="PACF Plot for Closing Prices (2015-2020)")
+```
+
+```{r}
+eacf(apple_ts)
+```
+
+## Augmented Dickey-Fuller Test
+
+```{r}
+adf_result = adf.test(apple_ts, alternative = "stationary")
+print(adf_result)
+```
+
+The Augmented Dickey-Fuller test result with a p-value of 0.3893 indicates that the Apple stock price series is non-stationary, as we cannot reject the null hypothesis of a unit root.
+
+```{r}
+diff_apple_ts <- diff(apple_ts)
+
+# Plotting the differenced time series
+plot(diff_apple_ts, type='l', col='blue', main="Differenced Closing Prices", ylab="Differenced Prices")
+```
+
+```{r}
+adf_result_diff = adf.test(diff_apple_ts, alternative = "stationary")
+print(adf_result_diff)
+```
+
+```{r}
+acf(diff_apple_ts, main="ACF Plot for Differenced Closing Prices (2015-2020)") 
+```
+
+```{r}
+pacf(diff_apple_ts, main="PACF Plot for Differenced Closing Prices (2015-2020)") 
+```
+
+```{r}
+eacf(diff_apple_ts)
+```
+
+Based on the eacf, we could consider ARIMA(1,1,0), ARIMA(2,1,0), ARIMA(1,1,1), ARIMA(2,1,1), ARIMA(3,1,2).
+
+```{r}
+ARIMA110 = Arima(apple_ts, order = c(1,1,0), method="ML")
+ARIMA110
+```
+
+```{r}
+ARIMA210 = Arima(apple_ts, order = c(2,1,0), method="ML")
+ARIMA210
+```
+
+```{r}
+ARIMA111 = Arima(apple_ts, order = c(1,1,1), method="ML")
+ARIMA111
+```
+
+```{r}
+ARIMA211 = Arima(apple_ts, order = c(2,1,1), method="ML")
+ARIMA211
+```
+
+```{r}
+ARIMA312 = Arima(apple_ts, order = c(3,1,2), method="ML")
+ARIMA312
+```
+
+ARIMA312 performs the best with the lowest aic value.
+
+# RESIDUAL ANALYSIS
+
+```{r}
+res_ARIMA312 = rstandard(ARIMA312) 
+plot(res_ARIMA312)
+```
+
+```{r}
+acf(res_ARIMA312)
+```
+
+```{r}
+tsdiag(ARIMA312)
+```
+
+```{r}
+qqnorm(res_ARIMA312)
+qqline(res_ARIMA312)
+```
+
+```{r}
+shapiro.test(res_ARIMA312)
+```
+
+```{r}
+hist(res_ARIMA312)
+```
+
+he histogram of the residuals from the ARIMA(3,1,2) model shows that the residuals are relatively normally distributed around zero, with a slight skew to the right. This suggests that the model has done a reasonable job of capturing the patterns in the data, although the presence of skewness might indicate some remaining systematic variation that the model has not fully accounted for.
+
+```{r}
+LB.test(ARIMA312, lag=6)
+```
+
+```{r}
+forecast_ARIMA312 = forecast(ARIMA312, h=900)
+prediction_ARIMA312 = predict(forecast_ARIMA312, n.ahead=20000)
+plot(forecast_ARIMA312, main="Original Time Series")
+lines(prediction_ARIMA312$mean)
+
+```
+
+The forecast suggests a stable outlook with some uncertainty as indicated by the widening confidence intervals further into the future.
+
+```{r}
+# forecast_ARIMA312
+```
+
+Now, lets try GARCH Model.
+
+```{r}
+# Specify the GARCH(1,1) model
+spec_garch <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+                         mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
+                         distribution.model = "norm")
+
+# Fit the GARCH model to the closing prices
+fit_garch <- ugarchfit(spec = spec_garch, data = apple_ts)
+```
+
+```{r}
+summary(fit_garch)
+```
+
+```{r}
+plot(fit_garch, which = 1)
+```
+
+```{r}
+forecast_garch <- ugarchforecast(fit_garch, n.ahead = 10)
+plot(forecast_garch, which = 1)
+
+```
+
+This shows the actual time series data up until a certain point and then includes a forecast for the next 10 time steps. The forecast region is highlighted in yellow, indicating the forecast values along with their 1-sigma uncertainty bands, providing a visual representation of expected future values and their variability.
+
+```{r}
+plot(forecast_garch, which = 3)
+```
+```{r}
+# Specify the GARCH(1,3) model
+spec_garch <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 3)),
+                         mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
+                         distribution.model = "norm")
+
+# Fit the GARCH model to the closing prices
+fit_garch <- ugarchfit(spec = spec_garch, data = apple_ts)
+```
+
+```{r}
+summary(fit_garch)
+```
+
+```{r}
+plot(fit_garch, which = 1)
+```
+
+```{r}
+forecast_garch <- ugarchforecast(fit_garch, n.ahead = 10)
+plot(forecast_garch, which = 1)
+
+```
+The graph shows a 10-day forecast using a GARCH(1,3) model, displaying both the actual series and predicted values starting in January. The forecast is marked by red circles and is surrounded by a yellow shaded area representing the 1-Sigma confidence intervals, indicating the probable range of future values based on historical data. This visualizes predicted short-term volatility and is crucial for risk management in financial decision-making.
+
+```{r}
+plot(forecast_garch, which = 3)
+```
+
+## CONCLUSION
+The analysis of Apple's stock price using ARIMA and GARCH models highlights different aspects of forecasting stock market behavior. The ARIMA model, typically used for understanding and forecasting data without considering the volatility clustering in stock prices, provides a base prediction over the time series. On the other hand, the GARCH(1,1) and GARCH(1,3) models account for time-varying volatility, capturing the characteristic fluctuations seen in financial markets.
+
+The ARIMA model's forecast shows a continuing trend based on past patterns without giving insight into possible volatility. In contrast, the GARCH models, especially the GARCH(1,3), offer a more nuanced prediction that includes potential volatility, as indicated by the widening confidence intervals in the forecast period. This suggests increased uncertainty in future price movements, reflecting the dynamic and often unpredictable nature of stock prices.
+
+Overall, the combined use of these models provides a comprehensive forecast where ARIMA helps in understanding the direction of the trend while GARCH models add depth by accounting for the volatility dynamics, crucial for making informed investment decisions in the volatile environment of stock markets.
